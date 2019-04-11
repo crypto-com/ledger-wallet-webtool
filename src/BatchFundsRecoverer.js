@@ -1,4 +1,4 @@
-import React, { Component } from "react";
+import React, {Component} from "react";
 import fetchWithRetries from "./FetchWithRetries";
 
 import {
@@ -14,15 +14,17 @@ import {
   MenuItem
 } from "react-bootstrap";
 import Networks from "./Networks";
-import { findAddress } from "./PathFinderUtils";
+import {findAddress} from "./PathFinderUtils";
 import {
   estimateTransactionSize,
-  createPaymentTransaction
+  createPaymentTransactionBatch
 } from "./TransactionUtils";
 import Errors from "./Errors";
 import HDAddress from "./HDAddress";
 import zcash from "bitcoinjs-lib-zcash";
 import bitcoinjs from "bitcoinjs-lib";
+import FundsRecoverer from "./FundsRecoverer";
+
 let bitcoin = bitcoinjs;
 
 const VALIDATIONS = {
@@ -31,37 +33,12 @@ const VALIDATIONS = {
   1: "fast"
 };
 
-class FundsRecoverer extends Component {
+class BatchFundsRecoverer extends FundsRecoverer {
   hdAddress = new HDAddress();
 
   constructor(props) {
     super();
-    this.state = {
-      done: false,
-      running: false,
-      address: "",
-      prepared: false,
-      destination: "",
-      coin: "0",
-      wrongCoin: "0",
-      error: false,
-      segwit: true,
-      fees: 0,
-      customFees: false,
-      customFeesVal: 0,
-      empty: false,
-      standardFees: {
-        1: 3000,
-        3: 2000,
-        6: 1000
-      },
-      balance: 0,
-      path: "49'/0'/0'/0/0",
-      utxos: {},
-      txSize: 0,
-      useXpub: false,
-      xpub58: ""
-    };
+    this.state.path = "49'/0'/0'/0/0,49'/0'/0'/0/1";
   }
 
   reset = () => {
@@ -83,18 +60,27 @@ class FundsRecoverer extends Component {
   };
 
   handleChangeDestination = e => {
-    this.setState({ destination: e.target.value.replace(/\s/g, "") });
+    this.setState({destination: e.target.value.replace(/\s/g, "")});
   };
 
   handleChangePath = e => {
-    this.setState({ path: e.target.value.replace(/\s/g, ""), done: false });
+    this.setState({path: e.target.value.replace(/\s/g, ""), done: false});
   };
 
   handleChangeSegwit = e => {
     let isSegwit = e.target.checked;
+    let pathArray = this.state.path.split(",");
+    let changedPath = "";
+    let length = pathArray.length;
+    for (let i = 0; i < length; i++) {
+      changedPath += this.hdAddress.getPath(isSegwit, this.state.coin, pathArray[i]);
+      if (i < length - 1) {
+        changedPath += ","
+      }
+    }
     this.setState({
       segwit: isSegwit,
-      path: this.hdAddress.getPath(isSegwit, this.state.coin, this.state.path)
+      path: changedPath
     });
   };
 
@@ -116,11 +102,11 @@ class FundsRecoverer extends Component {
   };
 
   handleChangeUseXpub = e => {
-    this.setState({ useXpub: e });
+    this.setState({useXpub: e});
   };
 
   handleChangeXpub = e => {
-    this.setState({ xpub58: e.target.value.replace(/\s/g, "") });
+    this.setState({xpub58: e.target.value.replace(/\s/g, "")});
   };
 
   handleEditFees = e => {
@@ -143,7 +129,7 @@ class FundsRecoverer extends Component {
     });
   };
   handleChangeWrongCoin = e => {
-    this.setState({ wrongCoin: e.target.value });
+    this.setState({wrongCoin: e.target.value});
   };
 
   getFees = async () => {
@@ -154,8 +140,9 @@ class FundsRecoverer extends Component {
         "/fees";
       let response = await fetchWithRetries(path);
       let data = await response.json();
-      this.setState({ standardFees: data });
-    } catch (e) {}
+      this.setState({standardFees: data});
+    } catch (e) {
+    }
   };
 
   prepare = async e => {
@@ -167,43 +154,54 @@ class FundsRecoverer extends Component {
       empty: false,
       error: false
     });
-    let address;
+    let pathArray = this.state.path.split(",");
+    let pathLength = pathArray.length;
+    let addressArray = [];
+    let concatenatedAddresses = "";
+
     let txs = [];
     let spent = {};
-    try {
-      await this.getFees();
-      address = await findAddress(
-        this.state.path,
-        this.state.segwit,
-        this.state.wrongCoin,
-        this.state.useXpub ? this.state.xpub58 : undefined
-      );
-      if (this.state.coin === 2 && address.startsWith("3")) {
-        const decoded = bitcoinjs.address.fromBase58Check(address);
-        address = bitcoinjs.address.toBase58Check(decoded["hash"], 50);
+    for (let i = 0; i < pathLength; i++) {
+      let address;
+      try {
+        await this.getFees();
+        address = await findAddress(
+          pathArray[i],
+          this.state.segwit,
+          this.state.wrongCoin,
+          this.state.useXpub ? this.state.xpub58 : undefined
+        );
+        if (this.state.coin === 2 && address.startsWith("3")) {
+          const decoded = bitcoinjs.address.fromBase58Check(address);
+          address = bitcoinjs.address.toBase58Check(decoded["hash"], 50);
+        }
+        addressArray.push(address);
+        concatenatedAddresses += address;
+        if (i < pathLength - 1) {
+          concatenatedAddresses += ","
+        }
+      } catch (e) {
+        this.onError(Errors.u2f);
       }
-    } catch (e) {
-      this.onError(Errors.u2f);
     }
 
     try {
-      var blockHash = "";
+      let blockHash = "";
       var apiPath =
         "https://api.ledgerwallet.com/blockchain/v2/" +
         Networks[this.state.coin].apiName +
         "/addresses/" +
-        address +
+        concatenatedAddresses +
         "/transactions?noToken=true";
       const iterate = async (blockHash = "") => {
         const res = await fetchWithRetries(apiPath + blockHash);
         const data = await res.json();
         txs = txs.concat(data.txs);
         if (!data.truncated) {
-          console.log(txs);
           var utxos = {};
           txs.forEach(tx => {
             tx.inputs.forEach(input => {
-              if (input.address === address) {
+              if (addressArray.indexOf(input.address) > -1) {
                 if (!spent[input.output_hash]) {
                   spent[input.output_hash] = {};
                 }
@@ -213,7 +211,7 @@ class FundsRecoverer extends Component {
           });
           txs.forEach(tx => {
             tx.outputs.forEach(output => {
-              if (output.address === address) {
+              if (addressArray.indexOf(output.address) > -1) {
                 if (!spent[tx.hash]) {
                   spent[tx.hash] = {};
                 }
@@ -221,12 +219,13 @@ class FundsRecoverer extends Component {
                   if (!utxos[tx.hash]) {
                     utxos[tx.hash] = {};
                   }
+                  tx.addressPath = pathArray[addressArray.indexOf(output.address)];
                   utxos[tx.hash][output.output_index] = tx;
                 }
               }
             });
           });
-          return [utxos, address];
+          return [utxos, concatenatedAddresses];
         } else {
           return await iterate(
             "&blockHash=" + data.txs[data.txs.length - 1].block.hash
@@ -266,8 +265,8 @@ class FundsRecoverer extends Component {
       let txSize = Networks[this.state.coin].handleFeePerByte
         ? estimateTransactionSize(inputs, 1, this.state.segwit).max
         : Math.floor(
-            estimateTransactionSize(inputs, 1, this.state.segwit).max / 1000
-          ) + 1;
+        estimateTransactionSize(inputs, 1, this.state.segwit).max / 1000
+      ) + 1;
       this.setState({
         empty: false,
         txSize,
@@ -287,7 +286,7 @@ class FundsRecoverer extends Component {
   };
 
   send = async () => {
-    this.setState({ running: true, done: false, error: false });
+    this.setState({running: true, done: false, error: false});
     if (
       parseInt(this.state.coin, 10) === 133 ||
       parseInt(this.state.coin, 10) === 121
@@ -302,23 +301,22 @@ class FundsRecoverer extends Component {
         throw "Standard LTC segwit addresses start with 'M', convert it on https://litecoin-project.github.io/p2sh-convert/";
       }
 
-      tx = await createPaymentTransaction(
+      tx = await createPaymentTransactionBatch(
         this.state.destination,
         this.state.balance - this.state.fees,
         this.state.utxos,
         this.state.path,
         this.state.coin,
-        bitcoin.address.fromBase58Check(this.state.address).version ===
-          Networks[this.state.coin].bitcoinjs.scriptHash
+        bitcoin.address.fromBase58Check(this.state.address.split(",")[0]).version ===
+        Networks[this.state.coin].bitcoinjs.scriptHash
       );
-      var body = JSON.stringify({
+      let body = JSON.stringify({
         tx: tx
       });
-      var path =
+      let path =
         "https://api.ledgerwallet.com/blockchain/v2/" +
         Networks[this.state.coin].apiName +
         "/transactions/send";
-      console.log("res", tx);
       let res;
       try {
         res = await fetchWithRetries(path, {
@@ -336,7 +334,7 @@ class FundsRecoverer extends Component {
         if (e == "not ok") {
           let err = await res.text();
           err = JSON.parse(err);
-          console.log(err);
+          console.error(err);
           err = JSON.parse(err.error);
           throw Errors.sendFail + err.error.message;
         } else {
@@ -353,7 +351,7 @@ class FundsRecoverer extends Component {
     let error = false;
     const json = await tx.json();
     if (!json) {
-      console.log(error);
+      console.error(error);
       error = tx;
     }
     this.setState({
@@ -412,7 +410,7 @@ class FundsRecoverer extends Component {
     );
 
     return (
-      <div className="FundsRecoverer">
+      <div className="BatchFundsRecoverer">
         {this.state.error && (
           <Alert bsStyle="danger">
             <strong>Operation aborted</strong>
@@ -435,13 +433,13 @@ class FundsRecoverer extends Component {
           </Alert>
         )}
         <form onSubmit={this.prepare}>
-          <FormGroup controlId="FundsRecoverer">
+          <FormGroup controlId="BatchFundsRecoverer">
             <DropdownButton
               title={this.state.useXpub ? derivations[1] : derivations[0]}
               disabled={this.state.running || this.state.paused}
               bsStyle="primary"
               bsSize="medium"
-              style={{ marginBottom: "15px" }}
+              style={{marginBottom: "15px"}}
             >
               <MenuItem onClick={() => this.handleChangeUseXpub(false)}>
                 {" "}
@@ -452,7 +450,7 @@ class FundsRecoverer extends Component {
                 {derivations[1]}{" "}
               </MenuItem>
             </DropdownButton>
-            <br />
+            <br/>
             {this.state.useXpub && (
               <div>
                 <ControlLabel>XPUB</ControlLabel>
@@ -495,12 +493,12 @@ class FundsRecoverer extends Component {
             <FormControl
               type="text"
               value={this.state.path}
-              placeholder="44'/0'/0'/0/0"
+              placeholder="44'/0'/0'/0/0,44'/0'/0'/0/1"
               onChange={this.handleChangePath}
               disabled={this.state.running || this.state.prepared}
             />
-            <FormControl.Feedback />
-            <br />
+            <FormControl.Feedback/>
+            <br/>
             <ButtonToolbar>
               {!this.state.prepared && (
                 <Button
@@ -533,7 +531,7 @@ class FundsRecoverer extends Component {
                   <p>
                     The address {this.state.address} has{" "}
                     {this.state.balance /
-                      10 ** Networks[this.state.coin].satoshi}{" "}
+                    10 ** Networks[this.state.coin].satoshi}{" "}
                     {Networks[this.state.coin].unit} on it.
                   </p>
                 </Alert>
@@ -572,12 +570,12 @@ class FundsRecoverer extends Component {
                 <div className="amount">
                   Total to receive :{" "}
                   {(this.state.balance - this.state.fees) /
-                    10 ** Networks[this.state.coin].satoshi}{" "}
-                  {Networks[this.state.coin].unit} <br />
+                  10 ** Networks[this.state.coin].satoshi}{" "}
+                  {Networks[this.state.coin].unit} <br/>
                   Total fees :{" "}
                   {this.state.fees /
-                    10 ** Networks[this.state.coin].satoshi}{" "}
-                  {Networks[this.state.coin].unit} <br />
+                  10 ** Networks[this.state.coin].satoshi}{" "}
+                  {Networks[this.state.coin].unit} <br/>
                 </div>
                 <ButtonToolbar>
                   <Button
@@ -602,4 +600,4 @@ class FundsRecoverer extends Component {
   }
 }
 
-export default FundsRecoverer;
+export default BatchFundsRecoverer;
