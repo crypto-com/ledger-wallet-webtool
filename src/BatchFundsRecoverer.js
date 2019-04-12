@@ -68,9 +68,17 @@ class BatchFundsRecoverer extends FundsRecoverer {
 
   handleChangeSegwit = e => {
     let isSegwit = e.target.checked;
+    let pathArray = this.state.path.split(",");
+    let changedPath = "";
+    for (let i = 0; i < pathArray.length; i++) {
+      changedPath += this.hdAddress.getPath(isSegwit, this.state.coin, pathArray[i]);
+      if(i<pathArray.length-1){
+        changedPath+=","
+      }
+    }
     this.setState({
       segwit: isSegwit,
-      path: this.hdAddress.getPath(isSegwit, this.state.coin, this.state.path)
+      path: changedPath
     });
   };
 
@@ -154,7 +162,7 @@ class BatchFundsRecoverer extends FundsRecoverer {
         this.state.wrongCoin,
         this.state.useXpub ? this.state.xpub58 : undefined
       );
-      if (this.state.coin == 2 && address.startsWith("3")) {
+      if (this.state.coin === 2 && address.startsWith("3")) {
         const decoded = bitcoinjs.address.fromBase58Check(address);
         address = bitcoinjs.address.toBase58Check(decoded["hash"], 50);
       }
