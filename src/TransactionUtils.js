@@ -249,3 +249,74 @@ export var createPaymentTransaction = async (
   );
   return res;
 };
+export var createPaymentTransactionBatch = async (
+  recipientAddress,
+  amount,
+  utxos,
+  path,
+  coin,
+  segwit
+) => {
+  console.log("1.1");
+  amount = Math.floor(amount);
+  let indexes = [];
+  let txs = [];
+  const devices = await Transport.list();
+  if (devices.length === 0) throw "no device";
+  const transport = await Transport.open(devices[0]);
+  transport.setExchangeTimeout(60000);
+  transport.setDebugMode(true);
+  console.log("1.2");
+  const btc = new AppBtc(transport);
+  console.log("1.3", path);
+
+  try {
+    for (let h of Object.keys(utxos)) {
+      let path =
+        "https://api.ledgerwallet.com/blockchain/v2/" +
+        Networks[coin].apiName +
+        "/transactions/" +
+        h +
+        "/hex";
+      const res = await fetch(path);
+
+      if (!res.ok) {
+        throw "not ok";
+      }
+      console.log("1.4");
+
+      const data = await res.json();
+      let tx = btc.splitTransaction(
+        data[0].hex,
+        Networks[coin].isSegwitSupported,
+        Networks[coin].areTransactionTimestamped
+      );
+      for (let i in utxos[h]) {
+        indexes.push(parseInt(i, 10));
+        txs.push(tx);
+      }
+    }
+  } catch (e) {
+    throw Errors.networkError;
+  }
+  const inputs = zip(txs, indexes);
+  console.log("inputs", inputs);
+  const outputScript = createOutputScript(recipientAddress, amount, coin);
+  console.log("output script", outputScript);
+  const res = await btc.createPaymentTransactionNew(
+      inputs,
+      // Array(indexes.length).fill(path),
+      path.split(","),
+      undefined,
+      outputScript.toString("hex"),
+      undefined,
+      Networks[coin].sigHash,
+      segwit,
+      Networks[coin].areTransactionTimestamped
+          ? Math.floor(Date.now() / 1000) - 15 * 60
+          : undefined,
+      Networks[coin].additionals,
+      Networks[coin].expiryHeight
+  );
+  return res;
+};

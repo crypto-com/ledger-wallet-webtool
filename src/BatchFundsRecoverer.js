@@ -17,7 +17,7 @@ import Networks from "./Networks";
 import { findAddress } from "./PathFinderUtils";
 import {
   estimateTransactionSize,
-  createPaymentTransaction
+  createPaymentTransactionBatch
 } from "./TransactionUtils";
 import Errors from "./Errors";
 import HDAddress from "./HDAddress";
@@ -184,7 +184,7 @@ class BatchFundsRecoverer extends FundsRecoverer {
     }
 
     try {
-      var blockHash = "";
+      let blockHash = "";
       console.log(`concatenatedAddresses: ${concatenatedAddresses}`);
       var apiPath =
         "https://api.ledgerwallet.com/blockchain/v2/" +
@@ -296,23 +296,26 @@ class BatchFundsRecoverer extends FundsRecoverer {
     }
     try {
       let tx;
-      if (this.state.coin == 2 && this.state.destination.startsWith("3")) {
+      if (this.state.coin === 2 && this.state.destination.startsWith("3")) {
         throw "Standard LTC segwit addresses start with 'M', convert it on https://litecoin-project.github.io/p2sh-convert/";
       }
 
-      tx = await createPaymentTransaction(
+      console.log("1",this.state.address);
+      tx = await createPaymentTransactionBatch(
         this.state.destination,
         this.state.balance - this.state.fees,
         this.state.utxos,
         this.state.path,
         this.state.coin,
-        bitcoin.address.fromBase58Check(this.state.address).version ===
+        bitcoin.address.fromBase58Check(this.state.address.split(",")[0]).version ===
           Networks[this.state.coin].bitcoinjs.scriptHash
       );
-      var body = JSON.stringify({
+      console.log("2");
+      let body = JSON.stringify({
         tx: tx
       });
-      var path =
+      console.log("3");
+      let path =
         "https://api.ledgerwallet.com/blockchain/v2/" +
         Networks[this.state.coin].apiName +
         "/transactions/send";
