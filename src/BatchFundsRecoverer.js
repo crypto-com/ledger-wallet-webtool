@@ -219,6 +219,7 @@ class BatchFundsRecoverer extends FundsRecoverer {
                   if (!utxos[tx.hash]) {
                     utxos[tx.hash] = {};
                   }
+                  tx.addressPath = pathArray[addressArray.indexOf(output.address)];
                   utxos[tx.hash][output.output_index] = tx;
                 }
               }

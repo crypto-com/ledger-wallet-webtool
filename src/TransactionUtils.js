@@ -257,7 +257,7 @@ export var createPaymentTransactionBatch = async (
   coin,
   segwit
 ) => {
-  console.log("1.1");
+  console.log("1.1", utxos);
   amount = Math.floor(amount);
   let indexes = [];
   let txs = [];
@@ -293,6 +293,7 @@ export var createPaymentTransactionBatch = async (
       );
       for (let i in utxos[h]) {
         indexes.push(parseInt(i, 10));
+        tx.addressPath = utxos[h][i].addressPath;
         txs.push(tx);
       }
     }
@@ -301,12 +302,18 @@ export var createPaymentTransactionBatch = async (
   }
   const inputs = zip(txs, indexes);
   console.log("inputs", inputs);
+  let addressPathArray = [];
+  for(let j=0;j<inputs[0].length;j++){
+    addressPathArray.push(inputs[0][j].addressPath);
+  }
+  console.log("addressPathArray", addressPathArray);
   const outputScript = createOutputScript(recipientAddress, amount, coin);
   console.log("output script", outputScript);
   const res = await btc.createPaymentTransactionNew(
       inputs,
       // Array(indexes.length).fill(path),
-      path.split(","),
+      // path.split(","),
+      addressPathArray,
       undefined,
       outputScript.toString("hex"),
       undefined,
