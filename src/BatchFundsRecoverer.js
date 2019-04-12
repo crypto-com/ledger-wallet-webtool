@@ -70,9 +70,10 @@ class BatchFundsRecoverer extends FundsRecoverer {
     let isSegwit = e.target.checked;
     let pathArray = this.state.path.split(",");
     let changedPath = "";
-    for (let i = 0; i < pathArray.length; i++) {
+    let length = pathArray.length;
+    for (let i = 0; i < length; i++) {
       changedPath += this.hdAddress.getPath(isSegwit, this.state.coin, pathArray[i]);
-      if(i<pathArray.length-1){
+      if(i<length-1){
         changedPath+=","
       }
     }
@@ -151,32 +152,45 @@ class BatchFundsRecoverer extends FundsRecoverer {
       empty: false,
       error: false
     });
-    let address;
+    let pathArray = this.state.path.split(",");
+    let pathLength = pathArray.length;
+    let addressArray = [];
+    let concatenatedAddresses = "";
+
     let txs = [];
     let spent = {};
-    try {
-      await this.getFees();
-      address = await findAddress(
-        this.state.path,
-        this.state.segwit,
-        this.state.wrongCoin,
-        this.state.useXpub ? this.state.xpub58 : undefined
-      );
-      if (this.state.coin === 2 && address.startsWith("3")) {
-        const decoded = bitcoinjs.address.fromBase58Check(address);
-        address = bitcoinjs.address.toBase58Check(decoded["hash"], 50);
+    for (let i = 0; i < pathLength; i++) {
+      let address;
+      try {
+        await this.getFees();
+        address = await findAddress(
+            pathArray[i],
+            this.state.segwit,
+            this.state.wrongCoin,
+            this.state.useXpub ? this.state.xpub58 : undefined
+        );
+        if (this.state.coin === 2 && address.startsWith("3")) {
+          const decoded = bitcoinjs.address.fromBase58Check(address);
+          address = bitcoinjs.address.toBase58Check(decoded["hash"], 50);
+        }
+        addressArray.push(address);
+        concatenatedAddresses += address;
+        if (i < pathLength - 1) {
+          concatenatedAddresses += ","
+        }
+      } catch (e) {
+        this.onError(Errors.u2f);
       }
-    } catch (e) {
-      this.onError(Errors.u2f);
     }
 
     try {
       var blockHash = "";
+      console.log(`concatenatedAddresses: ${concatenatedAddresses}`);
       var apiPath =
         "https://api.ledgerwallet.com/blockchain/v2/" +
         Networks[this.state.coin].apiName +
         "/addresses/" +
-        address +
+        concatenatedAddresses +
         "/transactions?noToken=true";
       const iterate = async (blockHash = "") => {
         const res = await fetchWithRetries(apiPath + blockHash);
@@ -187,7 +201,7 @@ class BatchFundsRecoverer extends FundsRecoverer {
           var utxos = {};
           txs.forEach(tx => {
             tx.inputs.forEach(input => {
-              if (input.address === address) {
+              if (addressArray.indexOf(input.address)>-1) {
                 if (!spent[input.output_hash]) {
                   spent[input.output_hash] = {};
                 }
@@ -197,7 +211,7 @@ class BatchFundsRecoverer extends FundsRecoverer {
           });
           txs.forEach(tx => {
             tx.outputs.forEach(output => {
-              if (output.address === address) {
+              if (addressArray.indexOf(output.address)>-1) {
                 if (!spent[tx.hash]) {
                   spent[tx.hash] = {};
                 }
@@ -210,7 +224,7 @@ class BatchFundsRecoverer extends FundsRecoverer {
               }
             });
           });
-          return [utxos, address];
+          return [utxos, concatenatedAddresses];
         } else {
           return await iterate(
             "&blockHash=" + data.txs[data.txs.length - 1].block.hash
@@ -479,7 +493,7 @@ class BatchFundsRecoverer extends FundsRecoverer {
             <FormControl
               type="text"
               value={this.state.path}
-              placeholder="44'/0'/0'/0/0"
+              placeholder="44'/0'/0'/0/0,44'/0'/0'/0/1"
               onChange={this.handleChangePath}
               disabled={this.state.running || this.state.prepared}
             />
