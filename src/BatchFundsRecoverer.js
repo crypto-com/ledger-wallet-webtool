@@ -69,7 +69,6 @@ class BatchFundsRecoverer extends FundsRecoverer {
 
     handleChangeSegwit = e => {
         let isSegwit = e.target.checked;
-        console.log(`split 222 - ${this.state.path}`);
         let pathArray = this.state.path.split(",");
         let changedPath = "";
         let length = pathArray.length;
@@ -155,7 +154,6 @@ class BatchFundsRecoverer extends FundsRecoverer {
             empty: false,
             error: false
         });
-        console.log(`split 111 - ${this.state.path}`);
         let pathArray = this.state.path.split(",");
         let pathLength = pathArray.length;
         let addressArray = [];
@@ -189,7 +187,6 @@ class BatchFundsRecoverer extends FundsRecoverer {
 
         try {
             let blockHash = "";
-            console.log(`concatenatedAddresses: ${concatenatedAddresses}`);
             var apiPath =
                 "https://api.ledgerwallet.com/blockchain/v2/" +
                 Networks[this.state.coin].apiName +
@@ -201,7 +198,6 @@ class BatchFundsRecoverer extends FundsRecoverer {
                 const data = await res.json();
                 txs = txs.concat(data.txs);
                 if (!data.truncated) {
-                    console.log(txs);
                     var utxos = {};
                     txs.forEach(tx => {
                         tx.inputs.forEach(input => {
@@ -305,7 +301,6 @@ class BatchFundsRecoverer extends FundsRecoverer {
                 throw "Standard LTC segwit addresses start with 'M', convert it on https://litecoin-project.github.io/p2sh-convert/";
             }
 
-            console.log("1", this.state.address);
             tx = await createPaymentTransactionBatch(
                 this.state.destination,
                 this.state.balance - this.state.fees,
@@ -315,16 +310,13 @@ class BatchFundsRecoverer extends FundsRecoverer {
                 bitcoin.address.fromBase58Check(this.state.address.split(",")[0]).version ===
                 Networks[this.state.coin].bitcoinjs.scriptHash
             );
-            console.log("2");
             let body = JSON.stringify({
                 tx: tx
             });
-            console.log("3");
             let path =
                 "https://api.ledgerwallet.com/blockchain/v2/" +
                 Networks[this.state.coin].apiName +
                 "/transactions/send";
-            console.log("res", tx);
             let res;
             try {
                 res = await fetchWithRetries(path, {
@@ -342,7 +334,7 @@ class BatchFundsRecoverer extends FundsRecoverer {
                 if (e == "not ok") {
                     let err = await res.text();
                     err = JSON.parse(err);
-                    console.log(err);
+                    console.error(err);
                     err = JSON.parse(err.error);
                     throw Errors.sendFail + err.error.message;
                 } else {
@@ -359,7 +351,7 @@ class BatchFundsRecoverer extends FundsRecoverer {
         let error = false;
         const json = await tx.json();
         if (!json) {
-            console.log(error);
+            console.error(error);
             error = tx;
         }
         this.setState({

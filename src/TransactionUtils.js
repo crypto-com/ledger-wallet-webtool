@@ -230,9 +230,7 @@ export var createPaymentTransaction = async (
         throw Errors.networkError;
     }
     const inputs = zip(txs, indexes);
-    console.log("inputs", inputs);
     const outputScript = createOutputScript(recipientAddress, amount, coin);
-    console.log("output script", outputScript);
     const res = await btc.createPaymentTransactionNew(
         inputs,
         Array(indexes.length).fill(path),
@@ -257,7 +255,6 @@ export var createPaymentTransactionBatch = async (
     coin,
     segwit
 ) => {
-    console.log("1.1", utxos);
     amount = Math.floor(amount);
     let indexes = [];
     let txs = [];
@@ -266,9 +263,7 @@ export var createPaymentTransactionBatch = async (
     const transport = await Transport.open(devices[0]);
     transport.setExchangeTimeout(60000);
     transport.setDebugMode(true);
-    console.log("1.2");
     const btc = new AppBtc(transport);
-    console.log("1.3", path);
 
     try {
         for (let h of Object.keys(utxos)) {
@@ -283,7 +278,6 @@ export var createPaymentTransactionBatch = async (
             if (!res.ok) {
                 throw "not ok";
             }
-            console.log("1.4");
 
             const data = await res.json();
             let tx = btc.splitTransaction(
@@ -291,7 +285,6 @@ export var createPaymentTransactionBatch = async (
                 Networks[coin].isSegwitSupported,
                 Networks[coin].areTransactionTimestamped
             );
-            console.log("1.5");
 
             for (let i in utxos[h]) {
                 indexes.push(parseInt(i, 10));
@@ -299,23 +292,18 @@ export var createPaymentTransactionBatch = async (
                 txs.push(tx);
             }
 
-            console.log("1.6");
-
         }
     } catch (e) {
         throw Errors.networkError;
     }
     const inputs = zip(txs, indexes);
-    console.log("inputs", inputs);
     let addressPathArray = [];
     for (let j = 0; j < inputs.length; j++) {
         if (inputs[j][0].addressPath !== undefined) {
             addressPathArray.push(inputs[j][0].addressPath);
         }
     }
-    console.log("addressPathArray", addressPathArray);
     const outputScript = createOutputScript(recipientAddress, amount, coin);
-    console.log("output script", outputScript);
     const res = await btc.createPaymentTransactionNew(
         inputs,
         // Array(indexes.length).fill(path),
@@ -332,6 +320,5 @@ export var createPaymentTransactionBatch = async (
         Networks[coin].additionals,
         Networks[coin].expiryHeight
     );
-    console.log("1.7");
     return res;
 };
