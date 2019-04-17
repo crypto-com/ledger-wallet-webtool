@@ -178,7 +178,7 @@ class FundsRecoverer extends Component {
         this.state.wrongCoin,
         this.state.useXpub ? this.state.xpub58 : undefined
       );
-      if (this.state.coin == 2 && address.startsWith("3")) {
+      if (this.state.coin === 2 && address.startsWith("3")) {
         const decoded = bitcoinjs.address.fromBase58Check(address);
         address = bitcoinjs.address.toBase58Check(decoded["hash"], 50);
       }
@@ -298,7 +298,7 @@ class FundsRecoverer extends Component {
     }
     try {
       let tx;
-      if (this.state.coin == 2 && this.state.destination.startsWith("3")) {
+      if (this.state.coin === 2 && this.state.destination.startsWith("3")) {
         throw "Standard LTC segwit addresses start with 'M', convert it on https://litecoin-project.github.io/p2sh-convert/";
       }
 
